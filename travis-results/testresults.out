@@ -1,0 +1,60 @@
+=== RUN   TestNewCoordinator
+got idx: 0 for worker: 1
+Received vote from worker: Vote{worker: 1, vote: No}
+mid: 1 low: 1 high: 2
+got idx: 1 for worker: 2
+Received vote from worker: Vote{worker: 2, vote: No}
+Received ack from works: ACK{worker: 1}
+mid: 1 low: 1 high: 2
+Received ack from works: ACK{worker: 2}
+got idx: 0 for worker: 1
+Received vote from worker: Vote{worker: 1, vote: Yes}
+mid: 1 low: 1 high: 2
+got idx: 1 for worker: 2
+Received vote from worker: Vote{worker: 2, vote: No}
+mid: 1 low: 1 high: 2
+Received ack from works: ACK{worker: 2}
+got idx: 0 for worker: 1
+Received vote from worker: Vote{worker: 1, vote: No}
+mid: 1 low: 1 high: 2
+got idx: 1 for worker: 2
+Received vote from worker: Vote{worker: 2, vote: Yes}
+Received ack from works: ACK{worker: 1}
+got idx: 0 for worker: 1
+Received vote from worker: Vote{worker: 1, vote: Yes}
+mid: 1 low: 1 high: 2
+got idx: 1 for worker: 2
+Received vote from worker: Vote{worker: 2, vote: Yes}
+mid: 1 low: 1 high: 2
+Received ack from works: ACK{worker: 2}
+Received ack from works: ACK{worker: 1}
+--- PASS: TestNewCoordinator (2.73s)
+	coordinator_test.go:36: The test cases from xml: ss-tpctests-2
+	coordinator_test.go:44: The test case ID: 1
+	coordinator_test.go:45: current number or workers: 2
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 1}
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 2}
+	coordinator_test.go:79: Received decision message Decision{worker: 1, decision: Abort}
+	coordinator_test.go:79: Received decision message Decision{worker: 2, decision: Abort}
+	coordinator_test.go:99: Received final decision from coordination: Abort
+	coordinator_test.go:44: The test case ID: 2
+	coordinator_test.go:45: current number or workers: 2
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 1}
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 2}
+	coordinator_test.go:79: Received decision message Decision{worker: 2, decision: Abort}
+	coordinator_test.go:99: Received final decision from coordination: Abort
+	coordinator_test.go:44: The test case ID: 3
+	coordinator_test.go:45: current number or workers: 2
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 1}
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 2}
+	coordinator_test.go:79: Received decision message Decision{worker: 1, decision: Abort}
+	coordinator_test.go:99: Received final decision from coordination: Abort
+	coordinator_test.go:44: The test case ID: 4
+	coordinator_test.go:45: current number or workers: 2
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 1}
+	coordinator_test.go:59: Received cancommit message is: CanCommit{worker: 2}
+	coordinator_test.go:79: Received decision message Decision{worker: 2, decision: Commit}
+	coordinator_test.go:79: Received decision message Decision{worker: 1, decision: Commit}
+	coordinator_test.go:99: Received final decision from coordination: Commit
+PASS
+ok  	github.com/selabhvl/tpcGo	2.730s

@@ -1,0 +1,29 @@
+package twophasecommit
+
+import (
+	"testing"
+	"time"
+)
+
+func TestNewMessageHandler(t *testing.T) {
+
+	sendCanCommit := make(chan CanCommit, 16)
+	sendDecision := make(chan Decision, 16)
+	deliverVote := make(chan Vote, 16)
+	deliverAck := make(chan Ack, 16)
+	finalDecision := make(chan DecisionEnum, 1)
+
+	ch := NewCoordinator(sendCanCommit, sendDecision)
+
+	for i := 0; i < numOfWorker; i++ {
+		go func(i int) {
+			wh := NewWorker(i+1, deliverVote, deliverAck)
+			wh.Start()
+			mh := NewMessageHandler(sendCanCommit, deliverVote, sendDecision, deliverAck, ch, wh)
+			mh.Start()
+		}(i)
+	}
+	ch.Start(numOfWorker, finalDecision)
+
+	time.Sleep(60 * time.Millisecond)
+}

@@ -1,0 +1,27 @@
+language: go
+os:
+  - linux
+# - osx
+go:
+#  - 1.9.x
+  - 1.10.x
+#  - master
+sudo: false
+before_script:
+  - git config --global user.name "wruiwr"
+  - git config --global user.email "wruiwr86@gmail.com"
+script:
+  - go test -v > testresults.out
+  - sh coverage.sh
+after_script:
+  - cat testresults.out
+  - mkdir travis-results
+  - mv testresults.out ./travis-results/
+  - mv coverage.out ./travis-results/
+  - mv coveragefunc.out ./travis-results/
+  - mv coverage.html ./travis-results/
+#  - git checkout master
+  - git status -s
+  - git add -A
+  - git commit -m "update building result [ci skip]"
+  - git push --force --quiet https://selabhvl:$GITHUB_TOKEN_PRIVATE@github.com/selabhvl/tpcGo.git master

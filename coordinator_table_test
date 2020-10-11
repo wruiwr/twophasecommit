@@ -1,0 +1,102 @@
+package twophasecommit
+
+import (
+	"testing"
+	"time"
+)
+
+var coordiTests = []struct {
+	v  VoteSlice
+	d  DecisionSlice
+	fd DecisionEnum
+}{
+	{
+		[]Vote{{WorkerID(1), Yes}, {WorkerID(2), Yes}, {WorkerID(3), Yes}},
+		[]Decision{{WorkerID(1), Commit}, {WorkerID(2), Commit}, {WorkerID(3), Commit}},
+		Commit,
+	},
+
+	{
+		[]Vote{{WorkerID(1), Yes}, {WorkerID(2), No}, {WorkerID(3), Yes}},
+		[]Decision{{WorkerID(1), Commit}, {WorkerID(2), Abort}, {WorkerID(3), Commit}},
+		Abort,
+	},
+
+	{
+		[]Vote{{WorkerID(1), Yes}, {WorkerID(2), No}, {WorkerID(3), No}},
+		[]Decision{{WorkerID(1), Commit}, {WorkerID(2), Abort}, {WorkerID(3), Abort}},
+		Abort,
+	},
+
+	{
+		[]Vote{{WorkerID(1), No}, {WorkerID(2), No}, {WorkerID(3), No}},
+		[]Decision{{WorkerID(1), Abort}, {WorkerID(2), Abort}, {WorkerID(3), Abort}},
+		Abort,
+	},
+}
+
+func TestNewCoordinator(t *testing.T) {
+
+	sendCanCommit := make(chan CanCommit, 16)
+	sendDecision := make(chan Decision, 16)
+	finalDecision := make(chan DecisionEnum, 1)
+
+	for _, cs := range coordiTests {
+
+		ch := NewCoordinator(sendCanCommit, sendDecision)
+		ch.Start(numOfWorker, finalDecision)
+
+		t.Log("current test case:", cs)
+
+		for i := 0; i < numOfWorker; i++ {
+			go func() {
+				select {
+				case c, ok := <-sendCanCommit:
+					if !ok {
+						t.Log("Haven't received cancommit message")
+					} else {
+						t.Log("Received cancommit message is:", c.String())
+						idx := Search(cs.v, c, 0, len(cs.v))
+						ch.DeliverVote(cs.v[idx])
+					}
+				}
+			}()
+		}
+		time.Sleep(20 * time.Millisecond)
+
+		for j := 0; j < numOfWorker; j++ {
+			go func() {
+				select {
+				case d, ok := <-sendDecision:
+					if !ok {
+						t.Log("Haven't received decision message")
+					} else {
+						t.Log("Received decision message", d.String())
+						idx := Search(cs.d, d, 0, len(cs.d))
+						if d.GetDecision() != cs.d[idx].GetDecision() {
+							t.Errorf("got worker id=%d, decision=%s, expect worker id=%d, decision=%s", d.GetWorkID(), d.GetDecision(), cs.d[idx].GetWorkID(), cs.d[idx].GetDecision())
+						}
+						ch.DeliverACK(Ack{d.GetWorkID()})
+					}
+				}
+			}()
+		}
+		time.Sleep(40 * time.Millisecond)
+
+		go func() {
+			select {
+			case fd, ok := <-finalDecision:
+				if !ok {
+					t.Log("Haven't received final decision")
+				} else {
+					t.Log("Received final decision from coordination:", fd.String())
+					if fd != cs.fd {
+						t.Errorf("got the final decision=%s from coordinator, expect final decision=%s", fd.String(), cs.fd.String())
+					}
+				}
+			}
+		}()
+		time.Sleep(60 * time.Millisecond)
+	}
+	time.Sleep(80 * time.Millisecond)
+}

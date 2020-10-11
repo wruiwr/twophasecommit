@@ -1,0 +1,659 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/selabhvl/tpcGo/coordinator.go (94.7%)</option>
+				
+				<option value="file1">github.com/selabhvl/tpcGo/defs.go (88.0%)</option>
+				
+				<option value="file2">github.com/selabhvl/tpcGo/msghandler.go (0.0%)</option>
+				
+				<option value="file3">github.com/selabhvl/tpcGo/reader.go (75.0%)</option>
+				
+				<option value="file4">github.com/selabhvl/tpcGo/worker.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package tpcGo
+
+import (
+        "fmt"
+        "time"
+)
+
+// CoordinatorHandler represents a handler to handle the messages for coordinator.
+type CoordinatorHandler struct {
+        canCommitChannel chan&lt;- CanCommit // channel for sending CanCommit messages
+        voteChannel   chan Vote        // channel for receiving Vote messages
+        decisionChannel  chan&lt;- Decision  // channel for sending Decision messages
+        ackChannel    chan Ack         // channel for receiving Ack messages
+}
+
+// NewCoordinator returns a coordinator handler for a new coordinator. It takes the
+// following arguments:
+//
+// canCommitChannel: a send only channel used to send cancommit message to workers.
+//
+// decisionChannel: a send only channel used to send decision message to workers.
+func NewCoordinator(canCommitChannel chan&lt;- CanCommit, decisionChannel chan&lt;- Decision) *CoordinatorHandler <span class="cov8" title="1">{
+
+        return &amp;CoordinatorHandler{
+                canCommitChannel: canCommitChannel,
+                voteChannel:   make(chan Vote, 16),
+                decisionChannel:  decisionChannel,
+                ackChannel:    make(chan Ack, 16),
+        }
+}</span>
+
+// Start starts c's main run loop as a separate goroutine. The main run loop
+// sends cancommit and decision messages to workers, and handles incoming
+// vote messages and ack messages.
+func (c *CoordinatorHandler) Start(numOfWorker int, finalDecisionChannel chan DecisionEnum) <span class="cov8" title="1">{
+
+        for w := 1; w &lt;= numOfWorker; w++ </span><span class="cov8" title="1">{
+                canCommit := CanCommit{WorkerID(w)}
+                c.SendCanCommit(canCommit)
+        }</span>
+
+        <span class="cov8" title="1">var votes []Vote
+        numOfCommit := 0
+
+        go func() </span><span class="cov8" title="1">{
+                fd := Abort
+                for </span><span class="cov8" title="1">{
+                        select </span>{
+                        case v, ok := &lt;-c.voteChannel:<span class="cov8" title="1">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received vote from wokers")
+                                }</span> else<span class="cov8" title="1"> {
+                                        fmt.Println("Received vote from worker:", v.String())
+                                        if len(votes) &lt; numOfWorker </span><span class="cov8" title="1">{
+                                                votes = c.CollectVotes(v, votes)
+                                                if len(votes) == numOfWorker </span><span class="cov8" title="1">{
+                                                        for _, v := range votes </span><span class="cov8" title="1">{
+                                                                switch v.GetVote() </span>{
+                                                                case Yes:<span class="cov8" title="1">
+                                                                        numOfCommit++</span>
+                                                                case No:<span class="cov8" title="1">
+                                                                        abort := Decision{v.GetWorkID(), Abort}
+                                                                        c.SendDecision(abort)
+                                                                        fd = Abort</span>
+                                                                }
+                                                        }
+                                                        <span class="cov8" title="1">if numOfCommit == numOfWorker </span><span class="cov8" title="1">{
+                                                                for _, v := range votes </span><span class="cov8" title="1">{
+                                                                        commit := Decision{v.GetWorkID(), Commit}
+                                                                        c.SendDecision(commit)
+                                                                }</span>
+                                                                <span class="cov8" title="1">fd = Commit</span>
+                                                        }
+                                                        <span class="cov8" title="1">c.SendFinalDecision(finalDecisionChannel, fd)</span>
+                                                }
+                                        }
+                                }
+                        case a, ok := &lt;-c.ackChannel:<span class="cov8" title="1">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received ack from wokers", a)
+                                }</span> else<span class="cov8" title="1"> {
+                                        fmt.Println("Received ack from works:", a.String())
+                                }</span>
+                        }
+                }
+        }()
+        <span class="cov8" title="1">time.Sleep(500 * time.Millisecond)</span>
+}
+
+// sendFinalDecision sends the final decision of the coordinator to the test.
+func (c *CoordinatorHandler) SendFinalDecision(fdchannel chan DecisionEnum, fd DecisionEnum) <span class="cov8" title="1">{
+        fdchannel &lt;- fd
+}</span>
+
+// sendCanCommit sends cancommit message to workers.
+func (c *CoordinatorHandler) SendCanCommit(cc CanCommit) <span class="cov8" title="1">{
+        c.canCommitChannel &lt;- cc
+}</span>
+
+// sendDecision sends decision message to workers.
+func (c *CoordinatorHandler) SendDecision(d Decision) <span class="cov8" title="1">{
+        c.decisionChannel &lt;- d
+}</span>
+
+// DeliverVote receives vote message from workers.
+func (c *CoordinatorHandler) DeliverVote(v Vote) <span class="cov8" title="1">{
+        c.voteChannel &lt;- v
+}</span>
+
+// DeliverACK receives ack message from workers.
+func (c *CoordinatorHandler) DeliverACK(a Ack) <span class="cov8" title="1">{
+        c.ackChannel &lt;- a
+}</span>
+
+// collectVotes collect received votes.
+func (c *CoordinatorHandler) CollectVotes(v Vote, votes []Vote) []Vote <span class="cov8" title="1">{
+        return append(votes, v)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package tpcGo
+
+import "fmt"
+
+// The number of workers.
+const numOfWorker = 3
+
+// WorkerID represents a identifier for workers.
+type WorkerID int
+
+// VoteEnum represents the enumeration type for the value of the vote.
+type VoteEnum int
+
+const (
+        Yes VoteEnum = iota
+        No
+)
+
+var voteValues = []string{"Yes", "No"}
+
+// DecisionEnum represents the enumeration type for the value of the decision.
+type DecisionEnum int
+
+const (
+        Commit DecisionEnum = iota
+        Abort
+)
+
+var decisionValues = []string{"Commit", "Abort"}
+
+// ConCommit represents the message sent by the coordinator to workers.
+type CanCommit struct {
+        WorkerID WorkerID
+}
+
+// Vote represents the message sent by workers to the coordinator.
+type Vote struct {
+        WorkerID  WorkerID
+        VoteValue VoteEnum
+}
+
+// Decision represents the message sent by the coordinator to workers.
+type Decision struct {
+        WorkerID      WorkerID
+        DecisionValue DecisionEnum
+}
+
+// ACK represents the message sent by workers to the coordinator.
+type Ack struct {
+        WorkerID WorkerID
+}
+
+// String returns a string representation of the value of VoteEnum ve.
+func (ve VoteEnum) String() string <span class="cov8" title="1">{
+        return voteValues[ve]
+}</span>
+
+// String returns a string representation of the value of DecisionEnum de.
+func (de DecisionEnum) String() string <span class="cov8" title="1">{
+        return decisionValues[de]
+}</span>
+
+// String returns a string representation of cancommit c.
+func (cc CanCommit) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("CanCommit{worker: %d}", cc.WorkerID)
+}</span>
+
+// String returns a string representation of vote v.
+func (v Vote) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("Vote{worker: %d, vote: %s}", v.WorkerID, v.VoteValue)
+}</span>
+
+// String returns a string representation of decision d.
+func (d Decision) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("Decision{worker: %d, decision: %s}", d.WorkerID, d.DecisionValue)
+}</span>
+
+// String returns a string representation of ack a.
+func (a Ack) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("ACK{worker: %d}", a.WorkerID)
+}</span>
+
+// Coordinator represent a coordinator for the protocol.
+type Coordinator interface {
+        Start(numOfWorker int,finalDecisionChannel chan DecisionEnum)
+        SendCanCommit(cc CanCommit)
+        DeliverVote(v Vote)
+        CollectVotes(v Vote, votes []Vote) []Vote
+        SendDecision(d Decision)
+        DeliverACK(a Ack)
+        SendFinalDecision(fdchannel chan DecisionEnum, fd DecisionEnum)
+}
+
+// Worker represents a worker for the protocol.
+type Worker interface {
+        Start()
+        DeliverCanCommit(c CanCommit)
+        SendVote(v Vote)
+        DeliverDecision(d Decision)
+        SendACK(a Ack)
+}
+
+// Slice is a interface to represent a slice of messages.
+type Slice interface {
+        GetWorkID(idx int) WorkerID
+}
+
+// VoteSlice is the type to represent the slice of Vote.
+type VoteSlice []Vote
+
+// DecisionSlice is the type to represent the slice of Decision.
+type DecisionSlice []Decision
+
+// GetWorkID returns the workerID of each Vote in the slice of Vote.
+func (votes VoteSlice) GetWorkID(idx int) WorkerID <span class="cov8" title="1">{
+        return votes[idx].WorkerID
+}</span>
+
+// GetWorkID returns the workerID of each Decision in the slice of Decision.
+func (decisions DecisionSlice) GetWorkID(idx int) WorkerID <span class="cov8" title="1">{
+        return decisions[idx].WorkerID
+}</span>
+
+// Message is the interface to represent different types of messages.
+type Message interface {
+        GetWorkID() WorkerID
+}
+
+// GetWorkID returns the workerID of cancommit message.
+func (cc CanCommit) GetWorkID() WorkerID <span class="cov8" title="1">{
+        return cc.WorkerID
+}</span>
+
+// GetWorkID returns the workerID of vote message.
+func (v Vote) GetWorkID() WorkerID <span class="cov8" title="1">{
+        return v.WorkerID
+}</span>
+
+// GetVote returns the vote message value
+func (v Vote) GetVote() VoteEnum <span class="cov8" title="1">{
+        return v.VoteValue
+}</span>
+
+// GetWorkID returns the workerID of decision message.
+func (d Decision) GetWorkID() WorkerID <span class="cov8" title="1">{
+        return d.WorkerID
+}</span>
+
+// GetDecision returns the decision message value
+func (d Decision) GetDecision() DecisionEnum <span class="cov8" title="1">{
+        return d.DecisionValue
+}</span>
+
+// search is a binary search function to find the message from a slice.
+func Search(elems Slice, elem Message, low int, high int) int <span class="cov8" title="1">{
+        //fmt.Println("search elem:", elem.GetWorkID())
+        if low &gt; high </span><span class="cov0" title="0">{
+                return -1
+        }</span> else<span class="cov8" title="1"> {
+                mid := (low + high - 1) / 2
+                if low == 1 </span><span class="cov8" title="1">{
+                        fmt.Println("mid:",mid, "low:",low, "high:", high)
+                }</span>
+                //fmt.Println("mid:", mid)
+                // TODO: fixed a bug here
+                <span class="cov8" title="1">if low == high </span><span class="cov0" title="0">{
+                        return low
+                }</span>
+
+                <span class="cov8" title="1">if elems.GetWorkID(mid) &lt; elem.GetWorkID() </span><span class="cov8" title="1">{
+                        return Search(elems, elem, mid+1, high)
+                }</span> else<span class="cov8" title="1"> if elems.GetWorkID(mid) &gt; elem.GetWorkID() </span><span class="cov0" title="0">{
+                        return Search(elems, elem, low, mid-1)
+                }</span> else<span class="cov8" title="1"> {
+                        return mid
+                }</span>
+        }
+}
+
+/*func Bsearch(elems Slice, elem Message) (result int) {
+        mid := len(elems) / 2
+        switch {
+        case len(a) == 0:
+                result = -1 // not found
+        case elems[mid] &gt; search:
+                result, searchCount = binarySearch(a[:mid], search)
+        case elems[mid] &lt; search:
+                result, searchCount = binarySearch(a[mid+1:], search)
+                result += mid + 1
+        default: // a[mid] == search
+                result = mid // found
+        }
+        searchCount++
+        return
+}*/</pre>
+		
+		<pre class="file" id="file2" style="display: none">package tpcGo
+
+import (
+        "fmt"
+        "time"
+)
+
+// MessageHandler represents a handler to handle the messages exchanging between Coordinator and Workers.
+type MessageHandler struct {
+        canCommitChannel      chan CanCommit      // channel for coordinator to send cancommit message to workers
+        voteChannel           chan Vote           // channel for workers to send vote message to coordinator
+        decisionChannel       chan Decision       // channel for coordinator to send decision message to workers
+        ackChannel            chan Ack            // channel for workers to send ack message to coordinators
+        coordinatorHandler *CoordinatorHandler // a coordinatorHandler can handle the messages for coordinator
+        workerHandler      *WorkerHandler      // a workerHandler can handle the messages for a worker
+}
+
+// NewMessageHandler returns a message handler to handle the messages between Coordinator and Workers.
+// It takes following arguments:
+//
+// canCommitChannel: a channel used to send cancommit message from coordinator to workers.
+//
+// decisionChannel: a channel used to send decision message from coordinator to workers.
+//
+// voteChannel: a channel used to send vote message from workers to coordinator.
+//
+// ackChannel: a channel used to send ack message from workers to coordinator.
+func NewMessageHandler(sendCanCommit chan CanCommit, sendVote chan Vote,
+        sendDecision chan Decision, sendAck chan Ack, ch *CoordinatorHandler, wh *WorkerHandler) *MessageHandler <span class="cov0" title="0">{
+
+        return &amp;MessageHandler{
+                canCommitChannel:      sendCanCommit,
+                voteChannel:           sendVote,
+                decisionChannel:       sendDecision,
+                ackChannel:            sendAck,
+                coordinatorHandler: ch,
+                workerHandler:      wh,
+        }
+}</span>
+
+// Start starts m's main run loop as a separate goroutine. The main run loop
+// handles incoming message from workers and coordinator.
+func (m *MessageHandler) Start() <span class="cov0" title="0">{
+
+        go func() </span><span class="cov0" title="0">{
+                for </span><span class="cov0" title="0">{
+                        select </span>{
+                        case cc, ok := &lt;-m.canCommitChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received cancommit message in message handler")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received canncommit message in message handler", cc.String())
+                                        m.deliverCanCommit(cc)
+                                }</span>
+                        case v, ok := &lt;-m.voteChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received vote message in message handler")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received vote message in message handler", v.String())
+                                        m.deliverVote(v)
+                                }</span>
+                        case d, ok := &lt;-m.decisionChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received decision message in message handler")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received decision message in message handler", d.String())
+                                        m.deliverDecision(d)
+                                }</span>
+                        case a, ok := &lt;-m.ackChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received ack message in message handler")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received ack message in message handler", a.String())
+                                        m.deliverAck(a)
+                                }</span>
+                        }
+                }
+        }()
+
+        <span class="cov0" title="0">time.Sleep(60 * time.Millisecond)</span>
+}
+
+// deliverCanCommit delivers cancommit message from coordinator to workers.
+func (m *MessageHandler) deliverCanCommit(cc CanCommit) <span class="cov0" title="0">{
+        m.workerHandler.DeliverCanCommit(cc)
+}</span>
+
+// deliverVote delivers vote message from workers to coordinator.
+func (m *MessageHandler) deliverVote(v Vote) <span class="cov0" title="0">{
+        m.coordinatorHandler.DeliverVote(v)
+}</span>
+
+// deliverDecision delivers decision message from coordinator to workers.
+func (m *MessageHandler) deliverDecision(d Decision) <span class="cov0" title="0">{
+        m.workerHandler.DeliverDecision(d)
+}</span>
+
+// deliverAck delivers ack message from workers to coordinator.
+func (m *MessageHandler) deliverAck(a Ack) <span class="cov0" title="0">{
+        m.coordinatorHandler.DeliverACK(a)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package tpcGo
+
+import (
+        "encoding/xml"
+        "io/ioutil"
+)
+
+type XMLTest struct {
+        XMLName   xml.Name       `xml:"Test"`
+        TestName  string         `xml:"TestName,attr"`
+        TestCases []XMLTestCases `xml:"TestCase"`
+}
+
+type XMLTestCases struct {
+        XMLName       xml.Name          `xml:"TestCase"`
+        CaseID        string            `xml:"CaseID,attr"`
+        NumOfWorker   int               `xml:"NumOfWorker,attr"`
+        Votes         VoteSlice     `xml:"TestValues&gt;Vote"`
+        Decisions     DecisionSlice `xml:"TestOracles&gt;Decision"`
+        FinalDecision DecisionEnum  `xml:"TestOracles&gt;FinalDecision"`
+}
+
+func ParseXMLTestCase(file string, xmlTestCaseType interface{}) error <span class="cov8" title="1">{
+        b, err := ioutil.ReadFile(file)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">return xml.Unmarshal(b, &amp;xmlTestCaseType)</span>
+}
+
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package tpcGo
+
+import (
+        "fmt"
+        "math/rand"
+        "time"
+)
+
+// WorkerHandler represents a handler to handle the messages for Workers.
+type WorkerHandler struct {
+        workerId         int
+        canCommitChannel chan CanCommit // channel for receiving CanCommit messages
+        voteChannel         chan&lt;- Vote    // channel for sending Vote messages
+        decisionChannel  chan Decision  // channel for receiving Decision messages
+        ackChannel          chan&lt;- Ack     // channel for sending Ack messages
+}
+
+// NewWorker returns a worker handler for a new worker. It takes the
+// following arguments:
+//
+// workerId: worker's ID
+//
+// voteChannel: a send only channel used to send vote message to coordinator.
+//
+// ackChannel: a send only channel used to send ack message to coordinator.
+func NewWorker(id int, sendVote chan&lt;- Vote, sendAck chan&lt;- Ack) *WorkerHandler <span class="cov0" title="0">{
+
+        return &amp;WorkerHandler{
+                workerId:         id,
+                canCommitChannel: make(chan CanCommit, 16),
+                voteChannel:         sendVote,
+                decisionChannel:  make(chan Decision, 16),
+                ackChannel:          sendAck,
+        }
+}</span>
+
+// Start starts w's main run loop as a separate goroutine. The main run loop
+// sends vote and ack messages to coordinator, and handles incoming
+// cancommit messages and decision messages.
+func (w *WorkerHandler) Start() <span class="cov0" title="0">{
+
+        go func() </span><span class="cov0" title="0">{
+                for </span><span class="cov0" title="0">{
+                        select </span>{
+                        case cc, ok := &lt;-w.canCommitChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received cancommit from coordinator")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received cancommit from coordinator:", cc.String())
+                                        w.SendVote(w.createVote(cc.GetWorkID()))
+                                }</span>
+                        case d, ok := &lt;-w.decisionChannel:<span class="cov0" title="0">
+                                if !ok </span><span class="cov0" title="0">{
+                                        fmt.Println("Haven't received decision from coordinator")
+                                }</span> else<span class="cov0" title="0"> {
+                                        fmt.Println("Received decision from coordinator:", d.String())
+                                        w.SendACK(w.createAck(d.GetWorkID()))
+                                }</span>
+
+                        }
+                }
+        }()
+        <span class="cov0" title="0">time.Sleep(20 * time.Millisecond)</span>
+}
+
+// DeliverCanCommit receives cancommit coming from coordinator.
+func (w *WorkerHandler) DeliverCanCommit(cc CanCommit) <span class="cov0" title="0">{
+        w.canCommitChannel &lt;- cc
+}</span>
+
+// sendVote sends vote to coordinator.
+func (w *WorkerHandler) SendVote(v Vote) <span class="cov0" title="0">{
+        w.voteChannel &lt;- v
+}</span>
+
+// DeliverDecision receives decision coming from coordinator.
+func (w *WorkerHandler) DeliverDecision(d Decision) <span class="cov0" title="0">{
+        w.decisionChannel &lt;- d
+}</span>
+
+// sendACK sends ack to coordinator.
+func (w *WorkerHandler) SendACK(a Ack) <span class="cov0" title="0">{
+        w.ackChannel &lt;- a
+}</span>
+
+// createVote creates a vote message with a randomly chosen "Yes" or "No".
+func (w *WorkerHandler) createVote(id WorkerID) Vote <span class="cov0" title="0">{
+        rand.Seed(time.Now().UnixNano())
+        votes := []VoteEnum{Yes, No}
+        vote := Vote{id, votes[rand.Intn(len(votes))]}
+        fmt.Println("Created vote message:", vote)
+        return vote
+}</span>
+
+// create creates a ack message.
+func (w *WorkerHandler) createAck(id WorkerID) Ack <span class="cov0" title="0">{
+        return Ack{id}
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

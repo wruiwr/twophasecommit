@@ -1,0 +1,45 @@
+package twophasecommit
+
+import (
+	"testing"
+	"time"
+)
+
+func TestNewWorker(t *testing.T) {
+
+	deliverVote := make(chan Vote, 16)
+	deliverAck := make(chan Ack, 16)
+
+	for i := 0; i < numOfWorker; i++ {
+
+		go func(j int) {
+			wh := NewWorker(j+1, deliverVote, deliverAck)
+			wh.Start()
+			wh.DeliverCanCommit(CanCommit{WorkerID(wh.workerId)})
+
+			for {
+				select {
+				case v, ok := <-deliverVote:
+					if !ok {
+						t.Log("Haven't received vote message")
+					} else {
+						t.Log("Received vote message is", v.String())
+						if v.GetVote() == Yes {
+							wh.DeliverDecision(Decision{WorkerID(v.GetWorkID()), Commit})
+						} else if v.GetVote() == No {
+							wh.DeliverDecision(Decision{WorkerID(v.GetWorkID()), Abort})
+						}
+					}
+
+				case a, ok := <-deliverAck:
+					if !ok {
+						t.Log("Haven't received ack message")
+					} else {
+						t.Log("Received ack message is", a.String())
+					}
+				}
+			}
+		}(i)
+	}
+	time.Sleep(60 * time.Millisecond)
+}
